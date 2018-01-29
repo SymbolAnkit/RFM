@@ -1,0 +1,183 @@
+
+rm(list = ls())
+
+setwd("C:/Users/ankit/Desktop/DR")
+
+library(RODBC)
+
+library(plyr)
+
+library(dplyr)
+
+library(stringr)
+
+library(readxl)
+
+dbhandle <- odbcDriverConnect('Driver={SQL Server};server=PC-TERM04SW01;database=1st;trusted_connection=True')
+
+res <- sqlQuery(dbhandle,"SELECT  a.[TransactionDate]
+                , a.[BarCode]
+                , a.[RefDocCode]
+                , a.[DocName]
+                , a.[DocCity]
+                , b.NSP
+                ,b.TestCode
+                FROM [PatientTransaction] a join [tblTestInfo] b on a.BarCode = b.BarCode")
+
+res$Date <- substr(res$TransactionDate,1,10)
+
+res$Date <- as.Date(res$Date , "%Y-%m-%d")
+
+res$RefDocCode <- as.character(res$RefDocCode)
+
+sum(is.na(res$NSP))
+
+summary(res$NSP)
+
+res <- na.omit(res)
+
+res <- res[order(res$Date),]
+
+res$last.trans <- as.numeric(difftime(Sys.Date(),res$Date , units = "days"))
+
+res$TestCode <- as.character(res$TestCode)
+
+res$TestCode <- trimws(res$TestCode)
+#  work start - find least frequent doctors
+drdata <- res %>% group_by(RefDocCode) %>%
+  summarise(netvalue = sum(NSP),
+            freq = length(Date),
+            recency = min(last.trans))
+
+drdata10 <- filter(drdata , drdata$freq < 6)
+
+least_ref_doctor <- drdata10$RefDocCode
+
+use_data <- res[ ! res$RefDocCode %in% least_ref_doctor ,  ]
+# work end
+
+#  start - find freq months 
+elapsed_months <- function(end_date , start_date)
+{
+  ed = as.POSIXlt(end_date)
+  sd = as.POSIXlt(start_date)
+  12 * (ed$year - sd$year) + (ed$mon - sd$mon)
+}
+
+use_data$ref.months <- elapsed_months(Sys.Date() , use_data$TransactionDate)
+
+refmonth <- use_data %>% group_by(RefDocCode) %>%
+  summarise(monthlyref = length(unique(ref.months)))
+
+# end
+
+final <- use_data %>% group_by(RefDocCode,TestCode) %>% 
+  summarise(netvalue = sum(NSP),
+            freq = length(Date),
+            recency = min(last.trans)
+  ) 
+
+final <- final[ ! final$netvalue <= 30 ,  ]
+
+#  all cuts
+recency_cuts <- quantile(final$recency , probs = seq(0.25,0.75,by=0.25))
+monetary_cuts <- quantile(final$netvalue , probs = seq(0.25,0.75,by=0.25) ,na.rm = T)
+frequency_cuts <- quantile(final$freq , probs = seq(0.25,0.75,by=0.25),na.rm = T)  
+# all segments
+final$recency_seg <- findInterval(final$recency, c(-Inf,recency_cuts,Inf))
+final$monetary_seg <- findInterval(final$netvalue, c(-Inf,monetary_cuts,Inf))
+final$frequency_seg <- findInterval(final$freq , c(-Inf,frequency_cuts,Inf))
+
+# mapping 
+refrnce_doc <- sqlQuery(dbhandle,"SELECT RefDocCode,DocCity,DocName FROM
+                        [DrLal].[dbo].[tblPatientTransaction] ")
+
+final$RefDocCode <- trimws(final$RefDocCode)
+
+refrnce_doc$RefDocCode <- trimws(refrnce_doc$RefDocCode)
+refrnce_doc$DocName <- trimws(refrnce_doc$DocName)
+refrnce_doc$DocCity <- trimws(refrnce_doc$DocCity)
+
+refrnce_doc$DocCity <- toupper(refrnce_doc$DocCity)
+refrnce_doc$DocName <- toupper(refrnce_doc$DocName)
+
+refrnce_doc$DocCity <- gsub("[[:punct:][:blank:]]+", " ", refrnce_doc$DocCity)
+refrnce_doc$DocName <- gsub("[[:punct:][:blank:]]+", " ", refrnce_doc$DocName)
+
+doc <- unique(subset(refrnce_doc,select = c("RefDocCode","DocName","DocCity")))
+
+target <- merge(final,doc,by.x = "RefDocCode",by.y = "RefDocCode",all.x = TRUE)
+
+test <- read_excel("DR Lal Data.xlsx" ,sheet = NULL,col_names = TRUE,trim_ws = TRUE)
+
+# test$TestName <- ifelse(test$TestCode=="A001","ALLERGY SCREEN",test$TestName)
+# test$TestName <- ifelse(test$TestCode=="A003","ALLERGY IND.PENICILLIUM NOTATUM",test$TestName)
+# test$TestName <- ifelse(test$TestCode=="A006","ALLERGY IND. MILK",test$TestName)
+# test$TestName <- ifelse(test$TestCode=="A008","ALLERGY IND., HOUSE DUST",test$TestName)
+# test$TestName <- ifelse(test$TestCode=="A009","ALLERGY IND., MITES (INCLUDES DERMATOPHAGOIDES",test$TestName)
+# test$TestName <- ifelse(test$TestCode=="A005","ALLERGY IND., ASPERGILLUS FUMIGATUS",test$TestName)
+# test$TestName <- ifelse(test$TestCode=="A010","ALLERGY IND.COCKROACH ",test$TestName)
+# test$TestName <- ifelse(test$TestCode=="A013","ALLERGY IND. HORSE DANDER ",test$TestName)
+# test$TestName <- ifelse(test$TestCode=="A015","ALLERGY IND., DOG DANDER ",test$TestName)
+# test$TestName <- ifelse(test$TestCode=="A019","ALLERGY IND. GLUTEN ",test$TestName)
+# test$TestName <- ifelse(test$TestCode=="A021","ALLERGY IND., PEANUT ",test$TestName)
+# test$TestName <- ifelse(test$TestCode=="A023","ALLERGY IND.JOHNSON GRASS (SORGHUM HALEPENSE) ",test$TestName)
+# test$TestName <- ifelse(test$TestCode=="A024","ALLERGY IND., ACACIA ",test$TestName)
+# test$TestName <- ifelse(test$TestCode=="A025","ALLERGY IND., _MUG WORT (ARTEMISIA VULGARIS) ",test$TestName)
+# test$TestName <- ifelse(test$TestCode=="A026","ALLERGY IND. WHITE PINE ",test$TestName)
+# test$TestName <- ifelse(test$TestCode=="A027","ALLERGY IND. EUCALYPTUS ",test$TestName)
+# test$TestName <- ifelse(test$TestCode=="A029","ALLERGY IND., RICE ",test$TestName)
+
+test$TestName <-  gsub("[[:punct:]]", " ", test$TestName)
+test$TestName <- toupper(test$TestName)
+test$TestName <- trimws(test$TestName)
+
+test$TestCode <-  gsub("[[:punct:]]", " ", test$TestCode)
+test$TestCode <- toupper(test$TestCode)
+test$TestCode <- trimws(test$TestCode)
+
+test1 <- unique(subset(test,select = c("TestCode","TestName")))
+test2 <- unique(test1[ , 1:2])
+test2$TestName <- gsub("^ *|(?<= ) | *$", "", test2$TestName, perl = TRUE)
+test2 <- unique(test2)
+write.csv(test2,"testnew.csv",row.names = F)
+
+testnew <- read.csv("testnew.csv" , header = T,stringsAsFactors = F)
+
+target_final <- merge(target,testnew,by.x ="TestCode",by.y ="TestCode",all.x = TRUE )
+
+tm <- unique(target_final[ , 1:11])
+
+tm$DocName <-  gsub("[[:punct:]]", " ", tm$DocName)
+tm$DocName <- toupper(tm$DocName)
+tm$DocName <- trimws(tm$DocName)
+
+tm$DocName <-  gsub("[[:punct:]]", " ", tm$DocName)
+tm$DocName <- toupper(tm$DocName)
+tm$DocName <- trimws(tm$DocName)
+
+tm$DocCity <-  gsub("[[:punct:]]", " ", tm$DocCity)
+tm$DocCity <- toupper(tm$DocCity)
+tm$DocCity <- trimws(tm$DocCity)
+
+tm <- merge(tm,refmonth,by.x ="RefDocCode",by.y = "RefDocCode" , all.x = T )
+
+tm$mnthref_seg <- ifelse(tm$monthlyref > 7 , 1 ,0)
+tm$mnthref_seg <-  ifelse(tm$monthlyref < 8 & tm$monthlyref > 5 , 2 ,tm$mnthref_seg)
+tm$mnthref_seg <-  ifelse(tm$monthlyref < 6 & tm$monthlyref > 3, 3 , tm$mnthref_seg)
+tm$mnthref_seg <-  ifelse(tm$monthlyref < 4 ,4 , tm$mnthref_seg)
+
+tosql <- data.frame(tm)
+
+sqlSave(dbhandle,tosql,tablename = "DOC_SEG",rownames = FALSE,colnames = FALSE,safer = FALSE,fast = TRUE)
+
+ 
+# validation 
+
+val <- tm %>% group_by(RefDocCode) %>% 
+  summarise(net = sum(netvalue))
+
+val.freq <- tm %>% group_by(RefDocCode) %>% 
+  summarise(f = sum(freq))
+
+
