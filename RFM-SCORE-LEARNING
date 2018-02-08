@@ -111,5 +111,5 @@ tosql <- data.frame(target)
 sqlSave(dbhandle,tosql,tablename = "DF_NAME",rownames = F,colnames = F,safer = F,fast = T)
 
 # save to csv file
-write.csv(target,"RFM_DRLAL_GR.csv" , row.names = F)
+write.csv(target,"RFM_DOCTOR_GR.csv" , row.names = F)
 
