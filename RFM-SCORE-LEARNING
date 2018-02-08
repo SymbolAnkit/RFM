@@ -12,7 +12,7 @@ library(stringr)
 library(readxl)
 
 # Make connection with sql server
-dbhandle <- odbcDriverConnect('Driver={SQL Server};server=PC-TERM04SW01;database=DrLal;trusted_connection=True')
+dbhandle <- odbcDriverConnect('Driver={SQL Server};server=SN;database=DBN;trusted_connection=True')
 
 # Extract data from sql server
 res <- sqlQuery(dbhandle,"SELECT Column Names FROM table_Name")
@@ -35,7 +35,7 @@ res <- res[order(res$Date),]
 # calulate last purchase days
 res$last.ref.days <- as.numeric(difftime(Sys.Date(),res$Date , units = "days"))
 
-#  work start - find least frequent Customer
+#  work start - find least frequent one
 
 drdata <- res %>% group_by(RefDocCode) %>%
   summarise(netvalue = sum(HomeCollectionCharges),
