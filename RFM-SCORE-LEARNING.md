@@ -1,39 +1,46 @@
- # Clear environment
-rm(list = ls())
+   __Clear environment__
 
-# set working directory
-setwd("C:/Users/Ankit/Desktop/RFM")
+    rm(list = ls())
 
-# load required libraries
-library(RODBC)
-library(plyr)
-library(dplyr)
-library(stringr)
-library(readxl)
+   __set working directory__
+   
+    setwd("C:/Users/Ankit/Desktop/RFM")
 
-# Make connection with sql server
-dbhandle <- odbcDriverConnect('Driver={SQL Server};server=SN;database=DBN;trusted_connection=True')
+   ### load required libraries
 
-# Extract data from sql server
-res <- sqlQuery(dbhandle,"SELECT Column Names FROM table_Name")
+    library(RODBC)
+    library(plyr)
+    library(dplyr)
+    library(stringr)
+    library(readxl)
 
-# extract date from date - time
-res$Date <- substr(res$TransactionDate,1,10)
+   #### Make connection with sql server
 
-res$Date <- as.Date(res$Date , "%Y-%m-%d")
+    dbhandle <- odbcDriverConnect('Driver={SQL Server};server=SN;database=DBN;trusted_connection=True')
 
-res$RefDocCode <- as.character(res$RefDocCode)
+ __Extract data from sql server__
 
-sum(is.na(res$HomeCollectionCharges))
+    res <- sqlQuery(dbhandle,"SELECT * FROM table_Name")
 
-summary(res$HomeCollectionCharges)
+__extract date from date - time__
 
-res$HomeCollectionCharges[which(is.na(res$HomeCollectionCharges))] <- 0
+    res$Date <- substr(res$TransactionDate,1,10)
 
-res <- res[order(res$Date),]
+    res$Date <- as.Date(res$Date , "%Y-%m-%d")
 
-# calulate last purchase days
-res$last.ref.days <- as.numeric(difftime(Sys.Date(),res$Date , units = "days"))
+    res$RefDocCode <- as.character(res$RefDocCode)
+
+    sum(is.na(res$HomeCollectionCharges))
+
+    summary(res$HomeCollectionCharges)
+
+    res$HomeCollectionCharges[which(is.na(res$HomeCollectionCharges))] <- 0
+
+    res <- res[order(res$Date),]
+
+   *__calulate last purchase days__*
+
+     res$last.ref.days <- as.numeric(difftime(Sys.Date(),res$Date , units = "days"))
 
 #  work start - find least frequent one
 
