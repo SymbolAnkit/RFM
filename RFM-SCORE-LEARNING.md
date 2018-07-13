@@ -42,81 +42,91 @@ __extract date from date - time__
 
      res$last.ref.days <- as.numeric(difftime(Sys.Date(),res$Date , units = "days"))
 
-#  work start - find least frequent one
+__work start - find least frequent one__
 
-drdata <- res %>% group_by(RefDocCode) %>%
-  summarise(netvalue = sum(HomeCollectionCharges),
-            freq = length(Date),
-            recency = min(last.ref.days))
+         drdata <- res %>% group_by(RefDocCode) %>% 
+         summarise(netvalue = sum(HomeCollectionCharges),
+                                    freq = length(Date),
+                              recency = min(last.ref.days))
 
-drdata10 <- filter(drdata , drdata$freq < 6)
+         drdata10 <- filter(drdata , drdata$freq < 6)
 
-least_ref_doctor <- drdata10$RefDocCode
+         least_ref_doctor <- drdata10$RefDocCode
 
-use_data <- res[ ! res$RefDocCode %in% least_ref_doctor ,  ]
+      use_data <- res[ ! res$RefDocCode %in% least_ref_doctor ,  ]
 
-# work end
+__work end__
 
-# group by 
-final <- use_data %>% group_by(RefDocCode) %>% 
-  summarise(R_VALUE = min(last.ref.days),
-            F_VALUE = length(Date),
-    M_VALUE = sum(HomeCollectionCharges)
-    )
+   ###### group by 
+
+      final <- use_data %>% group_by(RefDocCode) %>% 
+                summarise(R_VALUE = min(last.ref.days),
+                                F_VALUE = length(Date),
+                   M_VALUE = sum(HomeCollectionCharges) )
 
 
-final <- final[ ! final$M_VALUE <= 50 ,]
+         final <- final[ ! final$M_VALUE <= 50 ,]
 
-summary(final$R_VALUE)
-summary(final$F_VALUE)
-summary(final$M_VALUE)
+      summary(final$R_VALUE)
+      summary(final$F_VALUE)
+      summary(final$M_VALUE)
 
-# mark cuts
-Recency_cuts <- quantile(final$R_VALUE , probs = seq(0.20 ,0.80 , by=0.20))
-Frequency_cuts <- quantile(final$F_VALUE , probs = seq(0.20,0.80, by=0.20))
-Monetary_cuts <- quantile(final$M_VALUE , probs = seq(0.20,0.80,by=0.20))
+__mark cuts__
 
-# get score corresponding to cuts
-final$R_SCORE <- findInterval(final$R_VALUE , c(-Inf,Recency_cuts,Inf))
-final$F_SCORE <- findInterval(final$F_VALUE , c(-Inf,Frequency_cuts,Inf))
-final$M_SCORE <- findInterval(final$M_VALUE , c(-Inf,Monetary_cuts,Inf))
+      Recency_cuts <- quantile(final$R_VALUE , probs = seq(0.20 ,0.80 , by=0.20))
+      Frequency_cuts <- quantile(final$F_VALUE , probs = seq(0.20,0.80, by=0.20))
+      Monetary_cuts <- quantile(final$M_VALUE , probs = seq(0.20,0.80,by=0.20))
 
-final$COMB_F_M_SCORE <- ((final$F_SCORE + final$M_SCORE)/2)
+__get score corresponding to cuts__
 
-#calculate RFM score
-final$RFM_SCORE <- paste(final$R_SCORE,final$F_SCORE,final$M_SCORE,sep = "")
+      final$R_SCORE <- findInterval(final$R_VALUE , c(-Inf,Recency_cuts,Inf))
+      final$F_SCORE <- findInterval(final$F_VALUE , c(-Inf,Frequency_cuts,Inf))
+      final$M_SCORE <- findInterval(final$M_VALUE , c(-Inf,Monetary_cuts,Inf))
 
-#  Mapping 
+      final$COMB_F_M_SCORE <- ((final$F_SCORE + final$M_SCORE)/2)
 
-refrnce_doc <- sqlQuery(dbhandle,"SELECT column names FROM
+__calculate RFM score__
+
+      final$RFM_SCORE <- paste(final$R_SCORE,final$F_SCORE,final$M_SCORE,sep = "")
+
+__Mapping__
+
+      refrnce_doc <- sqlQuery(dbhandle,"SELECT column names FROM
                         table name2 ")
  
-final$RefDocCode <- trimws(final$RefDocCode)
+      final$RefDocCode <- trimws(final$RefDocCode)
 
-# remove white spaces
-refrnce_doc$RefDocCode <- trimws(refrnce_doc$RefDocCode)
-refrnce_doc$DocName <- trimws(refrnce_doc$DocName)
-refrnce_doc$DocCity <- trimws(refrnce_doc$DocCity)
+##### remove white spaces
 
-# convert to upper case
-refrnce_doc$DocCity <- toupper(refrnce_doc$DocCity)
-refrnce_doc$DocName <- toupper(refrnce_doc$DocName)
+      refrnce_doc$RefDocCode <- trimws(refrnce_doc$RefDocCode)
+      refrnce_doc$DocName <- trimws(refrnce_doc$DocName)
+      refrnce_doc$DocCity <- trimws(refrnce_doc$DocCity)
 
-# remove punctuations
-refrnce_doc$DocCity <- gsub("[[:punct:][:blank:]]+", " ", refrnce_doc$DocCity)
-refrnce_doc$DocName <- gsub("[[:punct:][:blank:]]+", " ", refrnce_doc$DocName)
+   ###### convert to upper case
 
-# unique values
-doc <- unique(subset(refrnce_doc,select = c("RefDocCode","DocName","DocCity")))
+      refrnce_doc$DocCity <- toupper(refrnce_doc$DocCity)
+      refrnce_doc$DocName <- toupper(refrnce_doc$DocName)
 
-# merge the data
-target <- merge(final,doc,by.x = "RefDocCode",by.y = "RefDocCode",all.x = TRUE)
+###### remove punctuations
 
-tosql <- data.frame(target)
+      refrnce_doc$DocCity <- gsub("[[:punct:][:blank:]]+", " ", refrnce_doc$DocCity)
+      refrnce_doc$DocName <- gsub("[[:punct:][:blank:]]+", " ", refrnce_doc$DocName)
 
-#save to sql server 
-sqlSave(dbhandle,tosql,tablename = "DF_NAME",rownames = F,colnames = F,safer = F,fast = T)
+###### unique values
 
-# save to csv file
-write.csv(target,"RFM_DOCTOR_GR.csv" , row.names = F)
+      doc <- unique(subset(refrnce_doc,select = c("RefDocCode","DocName","DocCity")))
+
+###### merge the data
+
+      target <- merge(final,doc,by.x = "RefDocCode",by.y = "RefDocCode",all.x = TRUE)
+
+      tosql <- data.frame(target)
+
+###### save to sql server 
+   
+        sqlSave(dbhandle,tosql,tablename = "DF_NAME",rownames = F,colnames = F,safer = F,fast = T)
+
+__save to csv file__
+         
+         write.csv(target,"RFM_DOCTOR_GR.csv" , row.names = F)
 
