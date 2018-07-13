@@ -36,7 +36,7 @@
             )))))))))))
 
 
-__Customer Segment            Activity          Actionable Tip          Recency Score Range           Frequency & Monetary Combined Score Range___
+__Customer Segment      |     Activity    |     Actionable Tip    |     Recency Score Range     |     Frequency & Monetary Combined Score Range___
 
 *     Champions         Bought recently, buy often and spend the most!        Reward them.            Can be early adopters for new products. Will promote your brand.        4 to 5            4 to 5
 
